@@ -43,11 +43,18 @@
 
 **How I verified no conflict remains:** The complete test suite passes using freshly generated UUID film IDs. A test verifies the watchlist film foreign key is `VARCHAR(36)`. Checked that main is an ancestor, there are no merge commits on the feature branch, and there are no unresolved files or conflict markers in Python sources.
 
-## Additional tests and visibility toggle
+## Extra credit — Remove from watchlist
+Implemented `remove_from_watchlist(user_id, film_id)` using the same `verb_from_noun` name and user/film pair lookup as `remove_from_collection()`. It deletes and commits only the matching watchlist entry, returns `True`, and raises `NotInWatchlistError` if the pair is absent. The pair lookup follows the same identity rule as the add function's deduplication check. Removing an entry leaves the Film record and other users' watchlist entries intact.
+
+The `DELETE /watchlist/<user_id>/remove` endpoint accepts `{"film_id": "<uuid>"}` and returns HTTP 200 after removal, 404 for a missing entry, and 400 for a missing field or non-object JSON body. Removing the same film a second time returns 404, matching the collection service's absent-entry behavior.
+
+Added tests for successful removal with another user's entry preserved, the missing-entry exception, and the HTTP remove flow, including re-adding a film after removal. All tests use the existing in-memory fixture pattern.
+
+## Extra credit — Additional tests and visibility toggle
 Added duplicate and HTTP regression tests beyond the required missing-film test. Duplicate prevention matters because the original feature silently created multiple entries. Tests also verify explicit public opt-in, invalid visibility input, the private default, recent-first ordering, and UUID schema compatibility. The visibility parameter is optional: omit it for false, or send `{"film_id": "<uuid>", "public": true}` to opt in.
 
 ## PR Description
-CineLog's watchlist lets a user save films for later and retrieve them with saved-date and visibility metadata. This update follows the project's service naming, rejects duplicate saves with HTTP 409, returns HTTP 404 for missing films, and adapts watchlist references to main's UUID film IDs.
+CineLog's watchlist lets a user save films for later and retrieve them with saved-date and visibility metadata. This update follows the project's service naming, rejects duplicate saves with HTTP 409, returns HTTP 404 for missing films, and adapts watchlist references to main's UUID film IDs. Users can also remove saved films through the DELETE endpoint; removal preserves the film and other users' saved entries.
 
 New entries default to private metadata so saving a film does not automatically express an intent to share; callers can explicitly set `public=true`. Lists show the most recently added films first to make recent recommendations easy to retrieve. The starter does not enforce visibility through authentication.
 
@@ -59,10 +66,11 @@ New entries default to private metadata so saving a film does not automatically 
 5. Repeat the same request. Expect 409, then GET `/watchlist/USER_UUID` and confirm there is only one entry for that film.
 6. Add a different valid film with `"public": true`. Expect 201 and true in the response. GET the watchlist and verify the more recent addition appears first.
 7. Send the all-zero nonexistent film UUID. Expect 404. Send an empty JSON object or a string-valued `public` field and expect 400.
-8. Run `python -m pytest tests/ -v`: all nine tests should pass.
+8. Send `curl -i -X DELETE http://127.0.0.1:5000/watchlist/USER_UUID/remove -H 'Content-Type: application/json' -d '{"film_id":"FILM_UUID"}'` for a saved film. Expect 200; GET the watchlist and confirm the film is absent. Repeat the DELETE and expect 404. Re-adding the film should return 201.
+9. Run `python -m pytest tests/ -v`: all twelve tests should pass.
 
 ## Local verification
-- Nine tests passed after the code changes and UUID rebase.
+- Twelve tests pass, including all three extra-credit features: removal, additional edge-case tests, and the visibility toggle.
 - Interactive rebase reworded the starter's nonconventional feature commit.
 - Final commit-log screenshot remains to be added before publishing.
 - AI Usage is intentionally blank for the student to complete.
