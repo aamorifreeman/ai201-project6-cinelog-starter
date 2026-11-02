@@ -28,11 +28,10 @@ def add_film(user_id):
     Body: { "film_id": "<uuid>", "public": false }
     """
     data = request.get_json()
-    if not data or "film_id" not in data:
-        return jsonify({"error": "film_id is required"}), 400
-
     if not isinstance(data, dict):
         return jsonify({"error": "JSON body must be an object"}), 400
+    if "film_id" not in data:
+        return jsonify({"error": "film_id is required"}), 400
     public = data.get("public", False)
     if not isinstance(public, bool):
         return jsonify({"error": "public must be a boolean"}), 400
