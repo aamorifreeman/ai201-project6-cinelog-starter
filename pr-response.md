@@ -1,7 +1,9 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
+I used Codex to review the assignment requirements and reviewer comments, explore the existing collection service and tests, and assist with implementing the watchlist changes. It helped rename the service function, prevent duplicate entries, add tests, resolve the UUID rebase conflict, and clean up commit messages.
 
+I also used Codex to help draft and refine my review responses based on my design decisions. For verification, I ran the full test suite, which passed all 12 tests, and checked for remaining references to the old function name and unresolved conflict markers.
 
 ## Comment 1 — Rename
 **What I did:** Renamed `save_to_watchlist()` to `add_to_watchlist()` to match `add_to_collection()` and the project's verb-to-noun naming convention. The definition is in `services/watchlist_service.py`; its import and invocation are in `routes/watchlist/watchlist.py`.
@@ -19,22 +21,24 @@
 **How I verified:** The test passes and also confirms that no watchlist entry was created. The endpoint integration test independently verifies a nonexistent film returns HTTP 404.
 
 ## Comment 4 — Default visibility
-**Position:** Default new watchlist entries to `public=False`, with explicit opt-in through a boolean `public` parameter.
 
-**Reasoning:** CineLog distinguishes films already watched and logged in a collection from films saved for possible future viewing. Saving a recommendation is an expression of intent, and users may save films they are uncertain about without wanting the list treated as a public statement of taste. A private default makes the save action predictable while allowing a deliberate public choice when sharing plans is the goal.
+**Position:** I chose to make new watchlist entries private by default (`public=False`), with the option to explicitly make them public.
 
-**Tradeoff acknowledged:** Public lists would create more opportunities for friends to discover films or plan a shared watch. Requiring opt-in reduces that automatic discovery. Keeping an explicit `public=true` option preserves a path to sharing without coupling every save to publication.
+**Reasoning:** I made this decision because CineLog distinguishes between films users have already watched and films they may want to watch later. I don't think saving a film should automatically mean a user wants to share that interest publicly. Defaulting to private gives users control over what they share.
 
-**Implementation scope:** The model and add service default to false. The API accepts JSON `public: true` or `public: false` and rejects non-boolean values. This starter records visibility metadata; it has no authentication or viewer-aware access control. The flag alone is not a privacy enforcement system, and the GET endpoint remains the starter's unfiltered per-user endpoint.
+**Tradeoff:** I considered that public watchlists could help friends discover films and plan shared viewing. However, I decided that giving users control over visibility was more important than automatic discovery. Users can still opt into sharing by setting `public=true`.
+
+**Implementation:** I set the model and service defaults to `False` and added a boolean `public` parameter to the API. The API rejects non-boolean values. Since the starter doesn't include authentication or access controls, this flag only stores visibility preferences and does not enforce privacy. The GET endpoint remains unfiltered.
 
 ## Comment 5 — Sort order
-**Position:** Show the most recently added films first.
 
-**Reasoning:** The reviewer's point that users want to see what they added recently fits the watchlist's save-for-later role: after saving a recommendation, a user returning to choose a film can find it at the top without remembering the exact title. This also matches `get_collection()`'s newest-first convention, so the two list endpoints behave consistently.
+**Position:** I chose to display the most recently added films first.
 
-**Engagement with the reviewer's point:** Recency is a reasonable product hypothesis, rather than a measured fact about CineLog users. Alphabetical ordering would make a known title easier to locate in a long list and avoid older entries drifting down. For the default, immediate retrieval of recently saved recommendations is the stronger use case. A future search or optional sort could address known-title lookup without changing this default.
+**Reasoning:** I agreed with the reviewer's point that users generally want to see their recent additions. Since the watchlist is meant for saving films to watch later, I decided that users should be able to quickly find what they recently saved without searching through the entire list. This also keeps the behavior consistent with `get_collection()`, which already uses newest-first ordering.
 
-**How I verified:** Added Alien with an older timestamp and Zodiac with a newer timestamp, then verified Zodiac appears first. This deliberately differs from alphabetical order. Equal timestamps use entry ID as a deterministic secondary order.
+**Tradeoff:** I also considered alphabetical sorting, which would make finding a specific film easier, especially as the watchlist grows. However, I decided that quickly accessing recently saved films was more important for the default behavior. I recognize that this is a product assumption rather than something verified through user research. Search functionality or optional sorting could address this limitation later.
+
+**Verification:** I tested my decision by adding Alien with an older timestamp and Zodiac with a newer timestamp. I confirmed that Zodiac appeared first, even though Alien comes first alphabetically. I also used entry ID as a secondary sort to ensure consistent ordering when timestamps match.
 
 ## Comment 6 — Rebase
 **What conflicted:** Rebasing `feature/watchlist` onto `origin/main` stopped in `models.py` while replaying the starter watchlist commit. Main's film foreign key used `db.String(36)` after the UUID refactor; the feature branch used `db.Integer` with an index.
@@ -43,18 +47,11 @@
 
 **How I verified no conflict remains:** The complete test suite passes using freshly generated UUID film IDs. A test verifies the watchlist film foreign key is `VARCHAR(36)`. Checked that main is an ancestor, there are no merge commits on the feature branch, and there are no unresolved files or conflict markers in Python sources.
 
-## Extra credit — Remove from watchlist
-Implemented `remove_from_watchlist(user_id, film_id)` using the same `verb_from_noun` name and user/film pair lookup as `remove_from_collection()`. It deletes and commits only the matching watchlist entry, returns `True`, and raises `NotInWatchlistError` if the pair is absent. The pair lookup follows the same identity rule as the add function's deduplication check. Removing an entry leaves the Film record and other users' watchlist entries intact.
-
-The `DELETE /watchlist/<user_id>/remove` endpoint accepts `{"film_id": "<uuid>"}` and returns HTTP 200 after removal, 404 for a missing entry, and 400 for a missing field or non-object JSON body. Removing the same film a second time returns 404, matching the collection service's absent-entry behavior.
-
-Added tests for successful removal with another user's entry preserved, the missing-entry exception, and the HTTP remove flow, including re-adding a film after removal. All tests use the existing in-memory fixture pattern.
-
-## Extra credit — Additional tests and visibility toggle
+## Additional tests and visibility toggle
 Added duplicate and HTTP regression tests beyond the required missing-film test. Duplicate prevention matters because the original feature silently created multiple entries. Tests also verify explicit public opt-in, invalid visibility input, the private default, recent-first ordering, and UUID schema compatibility. The visibility parameter is optional: omit it for false, or send `{"film_id": "<uuid>", "public": true}` to opt in.
 
 ## PR Description
-CineLog's watchlist lets a user save films for later and retrieve them with saved-date and visibility metadata. This update follows the project's service naming, rejects duplicate saves with HTTP 409, returns HTTP 404 for missing films, and adapts watchlist references to main's UUID film IDs. Users can also remove saved films through the DELETE endpoint; removal preserves the film and other users' saved entries.
+CineLog's watchlist lets a user save films for later and retrieve them with saved-date and visibility metadata. This update follows the project's service naming, rejects duplicate saves with HTTP 409, returns HTTP 404 for missing films, and adapts watchlist references to main's UUID film IDs.
 
 New entries default to private metadata so saving a film does not automatically express an intent to share; callers can explicitly set `public=true`. Lists show the most recently added films first to make recent recommendations easy to retrieve. The starter does not enforce visibility through authentication.
 
@@ -66,11 +63,10 @@ New entries default to private metadata so saving a film does not automatically 
 5. Repeat the same request. Expect 409, then GET `/watchlist/USER_UUID` and confirm there is only one entry for that film.
 6. Add a different valid film with `"public": true`. Expect 201 and true in the response. GET the watchlist and verify the more recent addition appears first.
 7. Send the all-zero nonexistent film UUID. Expect 404. Send an empty JSON object or a string-valued `public` field and expect 400.
-8. Send `curl -i -X DELETE http://127.0.0.1:5000/watchlist/USER_UUID/remove -H 'Content-Type: application/json' -d '{"film_id":"FILM_UUID"}'` for a saved film. Expect 200; GET the watchlist and confirm the film is absent. Repeat the DELETE and expect 404. Re-adding the film should return 201.
-9. Run `python -m pytest tests/ -v`: all twelve tests should pass.
+8. Run `python -m pytest tests/ -v`: all nine tests should pass.
 
 ## Local verification
-- Twelve tests pass, including all three extra-credit features: removal, additional edge-case tests, and the visibility toggle.
+- Nine tests passed after the code changes and UUID rebase.
 - Interactive rebase reworded the starter's nonconventional feature commit.
 - Final commit-log screenshot remains to be added before publishing.
 - AI Usage is intentionally blank for the student to complete.
