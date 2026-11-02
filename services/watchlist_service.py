@@ -50,7 +50,7 @@ def add_to_watchlist(user_id, film_id, public=False):
 
 def get_watchlist(user_id):
     """
-    Return all films on a user's watchlist.
+    Return a user's watchlist with the most recently added films first.
 
     Args:
         user_id (str): UUID of the user.
@@ -62,7 +62,7 @@ def get_watchlist(user_id):
         WatchlistEntry.query
         .filter_by(user_id=user_id)
         .join(Film)
-        .order_by(Film.title.asc())
+        .order_by(WatchlistEntry.date_added.desc(), WatchlistEntry.id.asc())
         .all()
     )
 
