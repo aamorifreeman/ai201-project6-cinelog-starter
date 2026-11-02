@@ -68,6 +68,7 @@ def test_watchlist_endpoint_add_and_duplicate(app, sample_user, sample_film):
     assert client.post(url, json={"film_id": sample_film}).status_code == 409
     assert client.post(url, json={"film_id": "00000000-0000-0000-0000-000000000000"}).status_code == 404
     assert client.post(url, json={}).status_code == 400
+    assert client.post(url, json=42).status_code == 400
     assert len(client.get(f"/watchlist/{sample_user}").json) == 1
 
 
