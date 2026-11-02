@@ -69,3 +69,30 @@ def test_watchlist_endpoint_add_and_duplicate(app, sample_user, sample_film):
     assert client.post(url, json={"film_id": "00000000-0000-0000-0000-000000000000"}).status_code == 404
     assert client.post(url, json={}).status_code == 400
     assert len(client.get(f"/watchlist/{sample_user}").json) == 1
+
+
+def test_watchlist_visibility_toggle(app, sample_user, sample_film):
+    client = app.test_client()
+    url = f"/watchlist/{sample_user}/add"
+    assert client.post(url, json={"film_id": sample_film, "public": "false"}).status_code == 400
+    response = client.post(url, json={"film_id": sample_film, "public": True})
+    assert response.status_code == 201
+    assert response.json["public"] is True
+
+
+def test_watchlist_private_default_and_recent_order(app, sample_user):
+    from datetime import datetime, timezone, timedelta
+    from services.watchlist_service import get_watchlist
+    with app.app_context():
+        old = Film(title="Alien")
+        recent = Film(title="Zodiac")
+        db.session.add_all([old, recent])
+        db.session.commit()
+        entry = add_to_watchlist(sample_user, old.id)
+        assert entry.public is False
+        entry.date_added = datetime.now(timezone.utc) - timedelta(days=2)
+        db.session.commit()
+        add_to_watchlist(sample_user, recent.id)
+        assert [film["title"] for film in get_watchlist(sample_user)] == ["Zodiac", "Alien"]
+        assert len(old.id) == 36
+        assert str(WatchlistEntry.__table__.c.film_id.type) == "VARCHAR(36)"
