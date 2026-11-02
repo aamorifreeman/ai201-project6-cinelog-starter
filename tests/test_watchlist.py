@@ -3,7 +3,10 @@ import pytest
 from app import create_app, db
 from models import User, Film, WatchlistEntry
 from services.collection_service import FilmNotFoundError
-from services.watchlist_service import add_to_watchlist, AlreadyInWatchlistError
+from services.watchlist_service import (
+    add_to_watchlist, AlreadyInWatchlistError,
+    remove_from_watchlist, NotInWatchlistError,
+)
 
 
 @pytest.fixture
@@ -97,3 +100,41 @@ def test_watchlist_private_default_and_recent_order(app, sample_user):
         assert [film["title"] for film in get_watchlist(sample_user)] == ["Zodiac", "Alien"]
         assert len(old.id) == 36
         assert str(WatchlistEntry.__table__.c.film_id.type) == "VARCHAR(36)"
+
+
+def test_remove_from_watchlist_preserves_other_users_and_film(app, sample_user, sample_film):
+    with app.app_context():
+        other_user = User(username="other", email="other@example.com")
+        db.session.add(other_user)
+        db.session.commit()
+        add_to_watchlist(sample_user, sample_film)
+        add_to_watchlist(other_user.id, sample_film)
+
+        assert remove_from_watchlist(sample_user, sample_film) is True
+        assert WatchlistEntry.query.filter_by(
+            user_id=sample_user, film_id=sample_film
+        ).count() == 0
+        assert WatchlistEntry.query.filter_by(
+            user_id=other_user.id, film_id=sample_film
+        ).count() == 1
+        assert db.session.get(Film, sample_film) is not None
+
+
+def test_remove_from_watchlist_missing_entry_raises(app, sample_user, sample_film):
+    with app.app_context():
+        with pytest.raises(NotInWatchlistError):
+            remove_from_watchlist(sample_user, sample_film)
+        assert WatchlistEntry.query.count() == 0
+
+
+def test_watchlist_remove_endpoint(app, sample_user, sample_film):
+    client = app.test_client()
+    add_url = f"/watchlist/{sample_user}/add"
+    remove_url = f"/watchlist/{sample_user}/remove"
+    assert client.post(add_url, json={"film_id": sample_film}).status_code == 201
+    assert client.delete(remove_url, json={"film_id": sample_film}).status_code == 200
+    assert client.get(f"/watchlist/{sample_user}").json == []
+    assert client.delete(remove_url, json={"film_id": sample_film}).status_code == 404
+    assert client.delete(remove_url, json={}).status_code == 400
+    assert client.delete(remove_url, json=42).status_code == 400
+    assert client.post(add_url, json={"film_id": sample_film}).status_code == 201
